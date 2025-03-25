@@ -1,0 +1,23 @@
+---
+all:
+  children:
+    cisco_switches:
+      vars:
+        ansible_network_os: cisco.ios.ios
+        ansible_connection: network_cli
+        ansible_become: true
+        ansible_become_method: enable
+        ansible_ssh_common_args: '-o KexAlgorithms=+diffie-hellman-group14-sha1'
+      children:
+        spines:
+          hosts:
+            SPINE-1:
+              ansible_host: x.x.x.x
+            SPINE-2:
+              ansible_host: x.x.x.x
+        leaves:
+          hosts:
+            lEAF-1:
+              ansible_host: x.x.x.x
+            LEAF-2:
+              ansible_host: x.x.x.x
