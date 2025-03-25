@@ -1,0 +1,135 @@
+---
+- name: Configure Rapid Spanning Tree
+  hosts: cisco_switches
+  gather_facts: no
+
+  # Prompt for credentials at runtime
+  vars_prompt:
+    - name: net_user
+      prompt: "Enter your cisco username"
+    - name: net_pass
+      prompt: "Enter your cisco password"
+      private: yes
+
+  vars:
+    ansible_user: "{{ net_user }}"
+    ansible_password: "{{ net_pass }}"
+    ansible_command_timeout: 60
+
+  tasks:
+    
+    - name: Test connectivity 
+      cisco.ios.ios_command:
+        commands: show version
+      register: version_output
+
+    - name: Display version output
+      debug:
+        var: version_output
+
+    - name: Set Hostnames 
+      cisco.ios.ios_hostname:
+        config:
+          hostname: SPINE-1
+        state: overridden
+      when: inventory_hostname == "SPINE-1"
+        
+
+    - name: Set Hostnames 
+      cisco.ios.ios_hostname:
+        config:
+          hostname: SPINE-2
+        state: overridden
+      when: inventory_hostname == "SPINE-2"
+
+
+    - name: Set Hostnames 
+      cisco.ios.ios_hostname:
+        config:
+          hostname: LEAF-1
+        state: overridden
+      when: inventory_hostname == "LEAF-1"
+
+    - name: Set Hostnames 
+      cisco.ios.ios_hostname:
+        config:
+          hostname: LEAF-2
+        state: overridden
+      when: inventory_hostname == "LEAF-2"   
+
+
+    - name: Build VLANS
+      cisco.ios.ios_vlans:
+        config:
+          - name: Management
+            vlan_id: 20
+          - name: AES67
+            vlan_id: 30
+          - name: Dante
+            vlan_id: 40
+        state: merged
+
+    - name: Assign Trunk interfaces
+      cisco.ios.ios_l2_interfaces:
+        config:
+        - name: GigabitEthernet1/0/1
+          mode: trunk
+          trunk:
+            allowed_vlans: 20,30,40
+            native_vlan: 999
+        - name: GigabitEthernet1/0/2
+          mode: trunk
+          trunk:
+            allowed_vlans: 20,30,40
+            native_vlan: 999
+        state: overridden
+
+    - name: Assign Access interfaces
+      cisco.ios.ios_l2_interfaces:
+        config:
+        - name: GigabitEthernet1/0/3
+          mode: access
+          access: 
+            vlan: 20
+        - name: GigabitEthernet1/0/4
+          mode: access
+          access: 
+            vlan: 30
+        - name: GigabitEthernet1/0/5
+          mode: access
+          access: 
+            vlan: 40
+        state: overridden
+ 
+    - name: Configure RSTP on all
+      cisco.ios.ios_config:
+        commands: 
+          - spanning-tree mode rapid-pvst
+          - spanning-tree pathcost method long
+
+    - name: Configure RSTP priorities 
+      cisco.ios.ios_config:
+        lines:  
+          - spanning-tree vlan 20,30,40 priority 0
+      when: inventory_hostname == "SPINE-1"  
+
+    - name: Configure RSTP priorities 
+      cisco.ios.ios_config:
+        lines: 
+          - spanning-tree vlan 20,30,40 priority 4096
+      when: inventory_hostname == "SPINE-2"  
+
+    - name: Configure Rootguard
+      cisco.ios.ios_config:
+        lines: 
+          - interface range GigabitEthernet1/0/1-2
+          - spanning-tree rootguard
+      when: inventory_hostname in ["SPINE-1", "SPINE-2"]
+
+    - name: Configure Portfast
+      cisco.ios.ios_config:
+        lines: 
+          - interface range GigabitEthernet1/0/3-4
+          - spanning-tree portfast
+          - spanning-tree bpduguard enable
+      when: inventory_hostname in ["LEAF-1", "LEAF-2"]
